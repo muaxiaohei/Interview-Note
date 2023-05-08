@@ -24,9 +24,9 @@ SPI接口通常指标准SPI，Dual SPI和Quad SPI通常是相对标准SPI提出�
 
 一般情况下硬件接线拓扑如下：
 
-![image-20220919151738488](.\figures\image-20220919151738488.png)
+![image-20220919151738488](figures/image-20220919151738488.png)
 
-![image-20220919195636632](.\figures\image-20220919195636632.png)
+![image-20220919195636632](figures/image-20220919195636632.png)
 
 上图只是对 SPI 设备间通信的一个简单的描述, 下面就来解释一下图中所示的几个组件(Module):
 
@@ -53,19 +53,19 @@ SPI 规定了两个 SPI 设备之间通信必须由主设备 (Master) 来控制�
 
 Master 设备会根据将要交换的数据来产生相应的时钟脉冲(Clock Pulse), 时钟脉冲组成了时钟信号(Clock Signal) , **时钟信号通过时钟极性 (CPOL) 和 时钟相位 (CPHA) 控制着两个 SPI 设备间何时数据交换以及何时对接收到的数据进行采样, 来保证数据在两个设备之间是同步传输的**。
 
-![image-20220919195319542](.\figures\image-20220919195319542.png)
+![image-20220919195319542](figures/image-20220919195319542.png)
 
 ## 1.3 数据交换(Data Exchanges)
 
 SPI 设备间的数据传输之所以又被称为**数据交换**, **是因为 SPI 协议规定一个 SPI 设备不能在数据通信过程中仅仅只充当一个 "发送者(Transmitter)" 或者 "接收者(Receiver)"**. 在每个 Clock 周期内, **SPI 设备都会发送并接收一个 bit 大小的数据(**不管主设备还是从设备**)**, 相当于该设备有一个 bit 大小的数据被交换了。 一个 Slave 设备要想能够接收到 Master 发过来的控制信号, 必须在此之前能够被 Master 设备进行访问 (Access). 所以, Master 设备必须首先通过 SS/CS pin 对 Slave 设备进行片选, 把想要访问的 Slave 设备选上。 在数据传输的过程中, 每次接收到的数据必须在下一次数据传输之前被采样. 如果之前接收到的数据没有被读取, 那么这些已经接收完成的数据将有可能会被丢弃, 导致 SPI 物理模块最终失效。**因此, 在程序中一般都会在 SPI 传输完数据后, 去读取 SPI 设备里的数据, 即使这些数据(Dummy Data)在我们的程序里是无用的(**虽然发送后紧接着的读取是无意义的，但仍然需要从寄存器中读出来**)**。
 
-![image-20220919195452492](.\figures\image-20220919195452492.png)
+![image-20220919195452492](figures/image-20220919195452492.png)
 
-![image-20220919195458046](.\figures\image-20220919195458046.png)
+![image-20220919195458046](figures/image-20220919195458046.png)
 
-![img](.\figures\8b77793457044b09ade6e66ee819d464.gif)
+![img](figures/8b77793457044b09ade6e66ee819d464.gif)
 
-![image-20220919195513673](.\figures\image-20220919195513673.png)
+![image-20220919195513673](figures/image-20220919195513673.png)
 
 ## 1.4 时钟极性CPOL（Clock Polarity）和时钟相位CPHA（Clock Phase）
 
@@ -88,7 +88,7 @@ SPI的极性Polarity和相位Phase，最常见的写法是CPOL和CPHA，不过�
 
 因此，SPI具有4种传输模式：**上升沿、下降沿、前沿、后沿触发**，当然也有MSB和LSB传输方式，只不过这与CPOL和CPHA无关。
 
-![image-20220919195021661](.\figures\image-20220919195021661.png)
+![image-20220919195021661](figures/image-20220919195021661.png)
 
 模式0：CPOL= 0，CPHA=0。SCK串行时钟线空闲是为低电平，数据在SCK时钟的上升沿被采样，数据在SCK时钟的下降沿切换
 
@@ -137,7 +137,7 @@ SPI从设备，具体是什么模式，相关的datasheet中会有描述，需�
 
 **SSPSR移位寄存器**
 
-![img](.\figures\0e3177c6f63d4db781136dbfb672d7c2.jpeg)
+![img](figures/0e3177c6f63d4db781136dbfb672d7c2.jpeg)
 
 SSPSR 是 SPI 设备内部的移位寄存器(Shift Register). 它的主要作用是根据 SPI 时钟信号状态, 往 SSPBUF 里移入或者移出数据, 每次移动的数据大小由 Bus-Width 以及 Channel-Width 所决定。
 
@@ -149,7 +149,7 @@ Channel-Width 的作用是指定 Master 设备与 Slave 设备之间数据传输
 
 **SSPBUF**
 
-![img](.\figures\85accde73dbb440292b52d3a53485e4c.jpeg)
+![img](figures/85accde73dbb440292b52d3a53485e4c.jpeg)
 
 我们知道, 在每个时钟周期内, Master 与 Slave 之间交换的数据其实都是 SPI 内部移位寄存器从 SSPBUF 里面拷贝的. 我们可以通过往 SSPBUF 对应的寄存器 (Tx-Data / Rx-Data register) 里读写数据, 间接地操控 SPI 设备内部的 SSPBUF.
 
@@ -157,13 +157,13 @@ Channel-Width 的作用是指定 Master 设备与 Slave 设备之间数据传输
 
 **Controller**
 
-![img](.\figures\5a51bfddcd3440be821b8bbbeee9de60.jpeg)
+![img](figures/5a51bfddcd3440be821b8bbbeee9de60.jpeg)
 
 Master 设备里面的 Controller 主要通过时钟信号(Clock Signal)以及片选信号(Slave Select Signal)来控制 Slave 设备. Slave 设备会一直等待, 直到接收到 Master 设备发过来的片选信号, 然后根据时钟信号来工作.
 
 Master 设备的片选操作必须由程序所实现. 例如: 由程序把 SS/CS 管脚的时钟信号拉低电平, 完成 SPI 设备数据通信的前期工作; 当程序想让 SPI 设备结束数据通信时, 再把 SS/CS 管脚上的时钟信号拉高电平.Controller
 
-![img](.\figures\5a51bfddcd3440be821b8bbbeee9de60-1664245963429-1.jpeg)
+![img](figures/5a51bfddcd3440be821b8bbbeee9de60-1664245963429-1.jpeg)
 
 Master 设备里面的 Controller 主要通过时钟信号(Clock Signal)以及片选信号(Slave Select Signal)来控制 Slave 设备. Slave 设备会一直等待, 直到接收到 Master 设备发过来的片选信号, 然后根据时钟信号来工作.
 
@@ -173,7 +173,7 @@ Master 设备的片选操作必须由程序所实现. 例如: 由程序把 SS/CS
 
 Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash，全双工并不常用，因此可以扩展了mosi和miso的用法，**让它们工作在半双工**，用以加倍数据传输速度。如下图的QIO0、QIO1总线，标准SPI通信时发送和接收时主机和从机都只能使用自己的那根数据线进行数据传输，Dual SPI无论是接收还是发送都是使用两根数据线进行的，所以**单向数据传输速度上是标准SPI的双倍（即一个时钟周期传输2bit数据）**。
 
-![image-20220919151750833](.\figures\image-20220919151750833.png)
+![image-20220919151750833](figures/image-20220919151750833.png)
 
 # 3 Quad SPI（Quad serial peripheral interface）四线SPI，即数据线最多可以使用4根
 
@@ -183,7 +183,7 @@ Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash
 
 一般来说，Quad SPI外设可以使用任意一种SPI模式，具体要看从设备的要求。
 
-![image-20220919151801013](.\figures\image-20220919151801013.png)
+![image-20220919151801013](figures/image-20220919151801013.png)
 
 ## 3.1 主要特性
 
@@ -211,9 +211,9 @@ Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash
 
 **STM32H7中集成的Quad SPI外设的功能框图如下：**
 
-![image-20220919151512710](.\figures\image-20220919151512710.png)
+![image-20220919151512710](figures/image-20220919151512710.png)
 
-![image-20220919151533265](.\figures\image-20220919151533265.png)
+![image-20220919151533265](figures/image-20220919151533265.png)
 
 ## 3.3 引脚定义
 
@@ -242,17 +242,17 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 <center><b>四线模式下的读命令示例</b></center>
 
-![image-20220920092734827](.\figures\image-20220920092734827.png)
+![image-20220920092734827](figures/image-20220920092734827.png)
 
 <font size=5>**指令阶段**</font>
 
 指令阶段只可以发送一个字节的数据，通过往寄存器QUADSPI_CCR[7:0]的INSTRUCTION字段写入即可。指令可以通过1/2/4线发送。一般1线的比较常见。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
 
 如下表所示，QUADSPI_CCR[9:8] 寄存器中的 IMODE[1:0]字段可用于配置指令阶段的位数（线数），**IMODE[1:0]=00代表没有指令阶段**。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663637996965-27.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663637996965-27.png)
 
 <font size=5>**地址阶段**</font>
 
@@ -262,7 +262,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 ADMODE = 00，则跳过地址阶段，命令序列直接进入下一阶段（如果存在）。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638127349-30.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638127349-30.png)
 
 <font size=5>**交替字节阶段**</font>
 
@@ -274,9 +274,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 交替字节阶段存在**仅需发送单个半字节而不是一个全字节**的情况，比如采用双线模式并且仅使用两个周期发送交替字节时。在这种情况下，固件可采用四线模式 (ABMODE = 11) 并发 送一个字节，方法是 ALTERNATE 的位 7 和 3 置“1”（IO3 保持高电平）且位 6 和 2 置 “0”（IO2 线保持低电平）。此时，半字节的高 2 位存放在 ALTERNATE 的位 4:3，低 2 位存放在位 1 和 0 中。例如，如果半字节 2 (0010) 通过 IO0/IO1 发送，则 ALTERNATE 应 设置为 0x8A (1000_1010)。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638588076-35.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638588076-35.png)
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638596222-38.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638596222-38.png)
 
 <font size=5>**空指令周期阶段**</font>
 
@@ -292,7 +292,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 >
 > 如果使用了QUADSPI硬件配置并且此周期内使用Quad-SPI或者Dual-SPI模式，则IO2被硬件强制设置为0来禁用写保护功能，并且IO被硬件强制设置为1来禁用保持功能。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638841799-41.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638841799-41.png)
 
 <font size=5>**数据阶段**</font>
 
@@ -308,9 +308,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 DMODE = 00，则跳过数据阶段，命令序列在拉高 nCS 时立即完成。这一配置仅可用于仅间接写入模式。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663639052404-44.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663639052404-44.png)
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
 
 ## 3.5 信号接口协议模式
 
@@ -329,7 +329,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 DMODE = 01，这对于空指令阶段也同样如此。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663725323469-3.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663725323469-3.png)
 
 #### <font size=5>**双线SPI模式**</font>
 
@@ -345,7 +345,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 在空指令阶段，若 DMODE = 01，则 IO0/IO1 始终保持高阻态。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726165946-9.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726165946-9.png)
 
 #### <font size=5>**QSPI模式**</font>
 
@@ -359,7 +359,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 SPI 模式，即使 QUADSPI 激活，对应 IO2 和 IO3 的引脚也可用于其他功能。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726217527-12.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726217527-12.png)
 
 #### <font size=5>**SDR模式（单倍数据速率模式，single data rate）**</font>
 
@@ -381,7 +381,7 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 因此，在半个 CLK 周期后（下一个反向边沿）对信号采样。
 
-![image-20220921101711830](.\figures\image-20220921101711830.png)
+![image-20220921101711830](figures/image-20220921101711830.png)
 
 #### <font size=5>**双闪存模式**</font>
 
@@ -401,13 +401,13 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 在双闪存模式下，FLASH 1 接口信号的行为基本上与正常模式下相同。在指令、地址、交替 字节以及空指令周期阶段，FLASH 2 接口信号具有与 FLASH 1 接口信号完全相同的波形。 也就是说，每个 FLASH 总是接收相同的指令与地址。然后，在数据阶段，BK1_IOx 和 BK2_IOx 总线并行传输数据，但发送到 FLASH 1（或从其接收）的数据与 FLASH 2 中的 不同。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727710340-15.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727710340-15.png)
 
 双闪存模式下，指令、地址、交替字节、空指令周期**同时发送**给BINK1和BINK2。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727957623-18.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727957623-18.png)
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728187152-21.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728187152-21.png)
 
 ## 3.6 功能说明
 
@@ -427,7 +427,7 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 当发送或接收的字节数达到编程设定值时，如果 TCIE = 1，则 TCF 置 1 并产生中断。在数 据数量不确定的情况下，将根据 QUADSPI_CR 中定义的 FLASH 大小，在达到外部 SPI 的 限制时，TCF 置 1。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728366102-24.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728366102-24.png)
 
 **触发命令启动**
 
@@ -473,7 +473,7 @@ FTHRES[3:0] 用于定义 FIFO 的阈值 如果达到阈值，FTF（FIFO 阈值�
 
 数据寄存器 (QUADSPI_DR) 包含最新接收的状态字节（FIFO 停用）。数据寄存器的内容不 受匹配逻辑所用屏蔽方法的影响。FTF 状态位在新一次状态读取完成后置 1，并且 FTF 在数 据读取后清零。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728761054-27.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728761054-27.png)
 
 #### <font size=5>**内存映射模式**</font>
 
@@ -498,7 +498,7 @@ QUADSPI 外设若没有正确配置并使能，禁止访问 QUADSPI Flash 的存
 
 BUSY 在第一个存储器映射访问发生时变为高电平。由于进行预取操作，BUSY 在发生超时、中止或外设禁止前不会下降。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728836518-30.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728836518-30.png)
 
 内存映射模式下最大访问大小为256Mbytes，访问地址为0x90000000 - 0x9FFFFFFF；
 
@@ -506,7 +506,7 @@ BUSY 在第一个存储器映射访问发生时变为高电平。由于进行预
 
 **<font color="#dd0000">不支持直接从外部Quad-SPI Flash启动</font>，但是可以先从内部Flash启动，然后配置Quad-SPI为内存映射模式，然后就可以从外部Quad-SPI Flash执行代码。**
 
-![img](.\figures\46639f7dc35b48b2a6f431ee26c8e76a.png)
+![img](figures/46639f7dc35b48b2a6f431ee26c8e76a.png)
 
 上图是内存映射模式下建议的MPU设置为strongly-ordered类型。这个知识点请参考：
 
@@ -535,7 +535,7 @@ QUADSPI 通信配置寄存器 (QUADSPI_CCR) 中的自由运行时钟模式位 (F
 
 如果DMAEN已经为1，如果需要更改FTHRES/FMODE则DMA控制器必须先禁用。
 
-![img](.\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663730247981-35.png)
+![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663730247981-35.png)
 
 #### <font size=5>**SPI FLASH 配置**</font>
 
@@ -598,7 +598,7 @@ DDR 模式可通过 DDRM 位进行设置。使能该模式后，在每个时钟�
 
 可以使用单独的中断使能位以提高灵活性。
 
-![image-20220921112135618](.\figures\image-20220921112135618.png)
+![image-20220921112135618](figures/image-20220921112135618.png)
 
 #### **<font size=5>更具体的内容参考数据手册</font>**
 
