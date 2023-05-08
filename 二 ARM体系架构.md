@@ -1,20 +1,308 @@
-#  SPI、Dual SPI和Quad SPI接口
+![QQ图片20230505205045](F:\8.ObsidianNote\figures\QQ图片20230505205045-1683534931965-1.png)
 
-参考链接：[STMCU中文官网](https://www.stmcu.com.cn/Search/index?csrf_token=3981e95d41743701a4c30827ca792aa6&search_keywords=RM0433&type=design_resource&page=1)
+# 1 ARM处理器
 
-[(2条消息) 标准SPI，Dual SPI和Qual SPI_山德鲁老师的博客-CSDN博客_dual spi](https://blog.csdn.net/miaokoko/article/details/79051209)
+## 1.1 哈佛结构（ARM）和冯诺依曼结构（x86）
 
-[(2条消息) 理解SPI/Dual SPI/Quad SPI/QPI之间的区别_coder.mark的博客-CSDN博客_spi和qpi](https://blog.csdn.net/tianizimark/article/details/124608851)
+1. 冯诺依曼结构釆用**指令和数据统一编址**，**使用同条总线传输**，**CPU读取指令和数据的操作无法重叠**。哈佛结构釆用**指令和数据独立编址**，使用两条独立的总线传输，**CPU读取指令和数据的操作可以重叠**。
+2. 冯诺依曼结构主要用于通用计算机领域，**需要对存储器中的代码和数据频繁的进行修改，统一编址有利于节约资源**。哈佛结构主要用于**嵌入式计算机（MCU）**，程序固化在硬件中，有较高的可靠性、运算速度和较大的吞吐。
+
+> 实际上，如今的内核开发已经没有分的那么细了，MCU也未必一定是哈佛架构或冯诺依曼架构（见上图），很容易见到混用哈佛结构后和冯诺依曼结构的ARM内核，如部分Cortex-A系列的CPU，甚至部分Cortex-M系列的MCU。
+
+## 1.2 流水线技术
+
+流水线技术**通过多个功能部件并行工作**来**缩短程序执行**时间，提高处理器核的效率和吞吐率，从而成为微处理器设计中最为重要的技术之一。
+
+> 流水线虽好，但流水线越多，功耗越大，占用的体积越大，所以在实际中厂商往往会选择功耗、体积和性能的平衡点。
+
+### 1.2.1 3级流水线
+
+1. **Fetch** – 指令从内存中取出并放置在流水线中；
+2. **Decode** – 指令解码，并为下一个周期准备数据信号；
+3. **Execute** – 贮备好的数据路径中的指令从注册表组中读取，将操作数移位到ALU，并将生成的结果写入主寄存器。
+
+![ARM_pipeline](F:\8.ObsidianNote\figures\arm_pipeline-1683534931965-2.gif)
+
+**流水线是在硬件级别实现的**，流水线是线性的，这意味着在简单的数据处理中，处理器在一个时钟周期内执行一条指令，而单个指令需要三个时钟周期。但是，当程序结构有分支时，管道会面临困难，因为它无法预测下一个命令是哪个。在这种情况下，管道会刷新并必须重新填充，这意味着执行速度将降至每3个时钟周期1条指令。但事实并非如此。ARM指令具有很好的功能，可以使代码中的小分支具有平滑的性能，从而确保最佳性能。**这是在硬件级别上实现的，其中PC（程序计数器）比当前指令提前8字节计算。**（PC+8）
+
+参考这篇文章：[汇编 - 为什么 ARM PC 寄存器指向下一个要执行的指令之后的指令？- 堆栈溢出 (stackoverflow.com)](https://stackoverflow.com/questions/24091566/why-does-the-arm-pc-register-point-to-the-instruction-after-the-next-one-to-be-e)
+
+PC 的值总是当前执行指令的下一个指令的下一个指令，因此PC的值往往是当前正在执行的指令的地址+8，具体可以参考下图（该图为一个5-Stage Pipeline的示意图）。
+
+> 如果发生中断，理论上，当前指令应当在原子时间内执行完，并转入中断，因此，此时记录的中断返回PC值为当前指令的地址+4。（欢迎纠错）
+
+![img](F:\8.ObsidianNote\figures\JTgS7-1683534931965-3.png)
+
+### 1.2.1 5级流水线
+
+参考上图，5级流水线上多了内存访问和寄存器回写阶段。
+
+## 1.3 ARM的9种工作模式
+
+| 工作模式        | 模式编码 | 模式介绍                                                     | 架构                           |
+| --------------- | -------- | ------------------------------------------------------------ | ------------------------------ |
+| User Mode       | 0b10000  | 应用程序正常运行时的工作模式                                 | ALL                            |
+| FIQ Mode        | 0b10001  | 快速中断模式，中断优先级比IRQ高，用于高速数据传输            | ALL                            |
+| IRQ Mode        | 0b10010  | 中断模式                                                     | ALL                            |
+| Supervisor Mode | 0b10011  | 管理模式，保护模式，适用于运行绝大多数内核代码<br />**复位和软中断时一般进入该模式** | ALL                            |
+| Abort Mode      | 0b10111  | 数据存储异常，指令读取失败会进入该模式，用于虚拟内存和存储保护 | ALL                            |
+| Undefined Mode  | 0b11011  | CPU遇到无法识别、未定义的指令时，会进入该状态                | ALL                            |
+| System Mode     | 0b11111  | 类似用户模式，但可以运行特权OS任务，如切换到其他模式<br />具有与User Mode相同的寄存器，并且不会因为任何异常进入<br />系统模式旨在提供必须访问系统资源，但不使用异常入口机制和关联的附加寄存器的机制，供操作系统任务使用<br />此外，操作系统必须访问用户模式寄存器时，也会使用该模式 | ARMv4 and later                |
+| Monitor Mode    | 0b10110  | 作为安全拓展的一部分实现，一种安全模式，支持在安全和非安全状态之间切换，始终处于安全状态，无视SCR.NS位的值，参见[*The Security Extensions*](https://developer.arm.com/documentation/ddi0406/b/System-Level-Architecture/The-System-Level-Programmers--Model/The-Security-Extensions?lang=en)<br />还可以用于处理FIQ、IRQ和外部中断<br />在执行安全监视调用指令（Secure Monitor Call, SMC）时进入<br /> | Security Extensions only       |
+| Hyp Mode        | 0b11010  | 虚拟机监控程序模式                                           | Virtualization Extensions only |
+
+应用程序正常运行时，ARM处理器工作在用户模式（User mode），当程序运行出错或有中断发生时，ARM处理器就会切换到对应的特权工作模式。用户模式属于普通模式，有些特权指令是运行不了的，需要切换到特权模式下才能运行。在ARM处理器中，除了用户模式是普通模式，剩下的几种工作模式都属于特权模式。  
+
+主要分为用户模式、特权模式、异常模式：
+
+1. 用户模式以外的模式称为**特权模式**，在安全状态下，特权模式对系统资源具有完全的访问权限，并可以自由更改模式，并具备以下权限：
+   - MRS（把状态寄存器的内容放到通用寄存器）；
+   - MSR（把通用寄存器的内容放到状态寄存器中）。
+2. FIQ、IRQ、Supervisor、Abort、Undefined、Monitor称为**异常模式**，每一种模式处理相应的异常，且都有一些存储寄存器，以避免在发生异常时损坏正在使用的模式的寄存器。
+
+安全和非安全模式：在实现安全扩展的处理器中，模式描述可以限定为“安全”或“不安全”，以指示处理器是否也处于安全状态或“非安全”状态。例如：
+
+1. 如果处理器处于特权模式和安全状态，则处于安全特权模式；
+2. 如果处理器处于用户模式和不安全状态，则处于非安全用户模式。
+
+
+
+> 对于ARMv7-M来说，有所不同，处理器运行在以下两种模式下。
+
+![image-20230506214212495](F:\8.ObsidianNote\figures\image-20230506214212495-1683534931965-4.png)
+
+## 1.4 ARM处理器有多少32位寄存器？
+
+> Reference：Armv7-M Architecture Reference Manual P516
+>
+> [Cortex-M3 Devices Generic User Guide (arm.com)](https://developer.arm.com/documentation/dui0552/a/the-cortex-m3-processor/programmers-model/core-registers?lang=en)
+
+### 1.4.1 核心寄存器
+
+对Cortex-M3和Cortex-M4来说，存在以下这些核心寄存器：
+
+![image-20230506205950990](F:\8.ObsidianNote\figures\image-20230506205950990-1683534931965-7.png)
+
+1. **寄存器组**
+
+   - 13个通用寄存器R0-R12
+   - 栈指针SP（R13，对应MSP和PSP）：0 = *主堆栈指针* （MSP），复位值，1 = *进程堆栈指针* （PSP），复位时，处理器使用地址 `0x00000000` 中的值加载 MSP
+   - 链接寄存器LR（R14）
+   - 程序寄存器PC（R15）
+
+   以上几种寄存器可以分为三类：
+
+   - 未分组寄存器R0-R7：
+
+     在所有运行模式下，未分组寄存器都指向同一个物理寄存器，他们未被系统用作特殊的用途。因此在中断或异常处理进行异常模式转换时，由于不同的处理器运行模式均使用相同的物理寄存器，所以可能造成寄存器中数据的破坏。  
+
+   - 分组寄存器R8-R14：
+
+     对于分组寄存器，他们每次所访问的物理寄存器都与当前的处理器运行模式相关。
+     R13常用作存放堆栈指针，用户也可以使用其他寄存器存放堆栈指针，但在Thumb指令集下，某些指令强制要求使用R13存放堆栈指针。
+     R14称为链接寄存器（LR，Link Register），当执行子程序时，R14可得到R15（PC）的备份，执行完子程序后，又将R14的值复制回PC，即使用R14保存返回地址。
+
+   - 程序计数器PC（R15） ：
+
+     指令必须对齐到半字或字地址，因此，PC的LSB为0，但Thumb模式下，LSB需要设置为1，以表示使用Thumb模式。
+
+     寄存器R15用作程序计数器（PC），在ARM状态下，位0为0，位[31:2]用于保存PC；在Thumb状态下,位[0]为1，位[31:1]用于保存PC。  
+
+2. **专用程序状态寄存器xPSR**
+
+   - 应用程序状态寄存器APSR：标志设置指令修改APSR标志N、Z、C、V和Q，处理器使用这些标志来评估IT和条件分支指令中的条件执行。
+
+     - 整数运算的状态标志（N-Z-C-V）
+     - 饱和运算的状态标志（Q）
+     - SIMD运算的状态标志（GE，在Cortex-M3中不可用）
+
+   - 中断程序状态寄存器IPSR：处理器在异常进入和退出时写入IPSR，软件可以使用MRS指令来读取IPSR，但处理器会忽略MSR指令对IPSR的写入。
+
+     - 线程模式下，为0；
+     - 处理模式下，保存当前执行异常的异常编号；
+
+     > 异常编号表示当前正在执行的异常及其入口向量，复位时，处理器处于线程模式，IPSR的异常编号字段被清除为0。因此，值1（用于重置的异常编号）是一个暂时值，软件无法将其视为有效的IPSR异常编号。
+
+   - 执行程序状态寄存器EPSR：包含T位，T位为1表示处理器执行的是Thumb指令，以及重叠的ICI/IT字段，该字段支持中断继续加载/存储指令和IT指令。
+
+     - EPSR.T位用以支持Arm体系结构互通模型，但**由于Armv7-M仅支持Thumb指令的执行，因此必须始终将其保持为值1。**对符合Thumb指令交互工作规则的PC指针的更新必须相应地更新EPSR.T。在EPSR.T设置为0的情况下执行指令会导致无效状态UsageFault和INVSTATE。一个复位：
+
+       1. 将T位设置为重置矢量的位[0]的值。如果处理器要执行由复位矢量指示的代码，则该位必须是1。如果此位为0，则处理器将执行HardFault异常并进入HardFault处理程序，堆栈ReturnAddress()值指向重置处理程序，并且堆栈xPSR值的T位设置为0。
+       2. 将IT/ICI位清除为0。
+
+     - ICI/IT位用于保存的异常可持续指令状态或保存的IT状态：
+
+       1. 当用作ICI位时，它们为中断的异常可持续多周期加载或存储指令提供有关未完成寄存器列表的信息。
+       2. 当用作IT位时，它们为IT块中指令序列的条件执行提供上下文信息，以便在适当的时候中断和重新启动。
+
+       如果在IT结构中使用异常可持续指令，则IT功能优先于ICI功能。在这种情况下，多周期加载或存储指令被视为可重新启动。
+
+   ![image-20230506173124194](F:\8.ObsidianNote\figures\image-20230506173124194-1683534931965-5.png)
+
+   > Cortex-A和Cortex-R体系结构配置文件有两个可供选择的指令集，Arm和Thumb。指令集状态标识当前指令集，PSR T位标识该状态。**M配置文件仅支持Thumb指令集**，因此只有当T位设置为1时，处理器才能执行指令。
+   >
+   > 所有字段使用MRS指令读取为零，处理器忽略MSR指令对EPSR的写入。
+
+![image-20230506160940060](F:\8.ObsidianNote\figures\image-20230506160940060-1683534931965-6.png)
+
+3. **用于异常或中断屏蔽的特殊目的寄存器**
+
+- PRIMASK：异常屏蔽寄存器，设置为1来提高执行的优先级为0（可编程异常和中断的最高优先级）；
+- FAULTMASK：错误屏蔽寄存器，只有优先级低于-1的特权软件才能将FAULTMASK设置为1，设置为1来提高执行的优先级为-1，相比PRIMASK还可以屏蔽HardFault异常。从除NMI以外的任何异常返回时，将FAULTMASK清除为0。
+- BASEEPRI：基本优先级屏蔽寄存器，根据优先级等级来屏蔽异常和中断，只有当BASEPRI的值低于当前执行的软件的未屏蔽优先级时，它才会生效。该寄存器的最长长度为8位，实际长度取决于设计实现的优先级数量，在Cortex-M3和Cortex-M4中，都有8个（3位）或16个（4位）可编程的异常优先级。
+
+**![image-20230506173836913](F:\8.ObsidianNote\figures\image-20230506173836913-1683534931966-8.png)**
+
+4. CONTROL寄存器：
+   - 定义了栈指针的选择（主栈指针MSP/进程栈指针PSP）；
+   - 定义了线程模式的访问等级（特权/非特权）；
+   - 对包含浮点单元的Cortex-M4处理器，还有表示当前上下文（正在执行的代码）是否使用浮点单元的标志位。
+
+![image-20230506210228947](F:\8.ObsidianNote\figures\image-20230506210228947-1683534931966-9.png)
+
+| **Bits** | Name  | **Function**                                                 |
+| -------- | ----- | ------------------------------------------------------------ |
+| [31:2]   | -     | Reserved.                                                    |
+| [1]      | SPSEL | Defines the currently active stack pointer: In Handler mode this bit reads as zero and ignores writes. The Cortex-M3 updates this bit automatically on exception return.<br />0 = MSP is the current stack pointer<br />1 = PSP is the current stack pointer. |
+| [0]      | nPRIV | Defines the Thread mode privilege level:<br />0 = Privileged<br />1 = Unprivileged. |
+
+处理模式始终使用MSP，因此处理器在处理模式下会忽略对 CONTROL 寄存器的活动堆栈指针位的显式写入。异常输入和返回机制根据EXC_RETURN值自动更新 CONTROL 寄存器，参阅[表2.17](https://developer.arm.com/documentation/dui0552/a/the-cortex-m3-processor/exception-model/exception-entry-and-return?lang=en)。
+
+在操作系统环境中，ARM 建议在线程模式下运行的线程使用进程堆栈，内核和异常处理程序使用主堆栈。默认情况下，线程模式使用 MSP，要将线程模式下使用的堆栈指针切换到 PSP，请执行以下任一操作：
+
+1. 使用 `MSR` 指令将活动堆栈指针位设置为 1，请参阅[*LS3*](https://developer.arm.com/documentation/dui0552/a/the-cortex-m3-instruction-set/miscellaneous-instructions/msr?lang=en).
+2. 使用适当的EXC_RETURN值执行异常返回到线程模式，请参阅[表2.17](https://developer.arm.com/documentation/dui0552/a/the-cortex-m3-processor/exception-model/exception-entry-and-return?lang=en).
+
+### 1.4.2 其他寄存器
+
+除 ARMv6-M and ARMv7-M以外的ARM处理器，总共有37个寄存器，如果设计中，实现了安全扩展，则增加3个寄存器，仅在ARMv7-A 中，如果实现了虚拟化扩展，则再添加3个寄存器。对于每种处理器模式，都有不同的寄存器组，这些寄存器提供了处理快速上下文切换，用于处理处理器异常和特权操作。
+
+特权软件执行中可用的其他寄存器（除 ARMv6-M and ARMv7-M以外）包括：
+
+1. 两个Supervisor mode 寄存器用于存储 SP 和 LR；
+2. 两个Abort mode 寄存器用于存储 SP 和 LR；
+3. 两个Undefined mode 寄存器用于存储 SP 和 LR；
+4. 两个IRQ mode 寄存器用于存储 SP 和 LR；
+5. 七个 FIQ mode 寄存器用于存储 R8-R12、SP 和 LR；
+6. 两个Monitor mode 寄存器用于存储 SP 和 LR，仅在安全扩展实现中存在；
+7. 两个Hyp mode 寄存器用于存储 SP ，保存Hyp mode的返回地址，仅在虚拟化扩展实现中存在；
+8. 一个 Saved Program Status Register (SPSR)用于每个异常模式。
+
+下图表示了在除ARMv6-M and ARMv7-M的ARM架构中，寄存器存储的方式。
+
+![image-20230506212855707](F:\8.ObsidianNote\figures\image-20230506212855707-1683534931966-10.png)
+
+此外，还存在可选的浮点单元可用的寄存器：
+
+1. S0\~S31（32位）/D0\~D15（64位），浮点处理使用的寄存器；
+2. FPSCR，浮点状态和控制寄存器；
+3. 经过存储器映射的浮点单元控制寄存器。
+
+## 1.5 ARM指令集
+
+分为Thumb指令集，ARM指令集，ARM指令长度为32位，Thumb指令长度为16位，Cortex-M内核的MCU只运行在Thumb模式下，以压缩代码密度，对于Cortex-A或Cortex-M的处理器来说，代码可以运行在两种模式下，但通常都只会选择一种，以减少编程难度。
+
+## 1.6 函数调用时，参数的传递方式
+
+**当参数小于等于4的时候是通过`R0~R3`寄存器来进行传递的，当参数大于4的时候是通过压栈的方式（从左往右）进行传递。**
+
+## 1.7 什么是锁相环（PLL，Phase Locked Loop）
+
+[让频率提升几十倍的电路！锁相环的工作原理！_哔哩哔哩_bilibili](https://www.bilibili.com/video/BV1yS4y1n7vV/?spm_id_from=333.337.search-card.all.click&vd_source=b2294685dcc4b104a99f116c1c175bce)
+
+简单来说，锁相环的作用就是将晶振的频率加倍，相位不变，并提供给CPU。
+
+鉴相器控制频率之间的相位，保证相位不变。
+
+滤波器使信号变得平滑。
+
+压控振荡器（VCO）将不同的电压转换成不同的频率。
+
+![image-20230506215850582](F:\8.ObsidianNote\figures\image-20230506215850582-1683534931966-11.png)
+
+![image-20230506215947044](F:\8.ObsidianNote\figures\image-20230506215947044-1683534931966-12.png)
+
+加入分频器，以达到倍频效果。
+
+![image-20230506220107171](F:\8.ObsidianNote\figures\image-20230506220107171-1683534931966-13.png)
+
+# 2 中断与异常
+
+## 2.1 中断与异常的区别
+
+中断是指外部硬件产生的一个电信号从CPU的中断引脚进入，打断CPU的运行。
+
+异常是指软件运行过程中发生了一些必须作出处理的事件，CPU自动产生一个陷入来打断CPU的运行。异常在处理的时候必须考虑与处理器的时钟同步，实际上异常也称为同步中断，在处理器执行到因编译错误而导致的错误指令时，或者在执行期间出现特殊错误，必须靠内核处理的时候，处理器就会产生一个异常。
+
+中断是异常的一个子集（至少在ARM架构下是这样描述的）。所有异常都可以中断当前软件的执行（不仅仅是中断）。所有中断都是异常，但并非所有异常都是中断。
+
+对于Cortex-M3和Cortex-M4来说，异常编号1~15为系统异常，16以上属于外部中断。
+
+![image-20230507195910175](F:\8.ObsidianNote\figures\image-20230507195910175-1683534931966-15.png)
+
+![image-20230507195918430](F:\8.ObsidianNote\figures\image-20230507195918430-1683534931966-14.png)
+
+## 2.2 中断响应流程（这里写的其实是Linux内核处理中断的方式）
+
+中断的响应流程：CPU接受中断->保存中断上下文跳转到中断处理历程->执行中断上半部->执行中断下半部->恢复中断上下文。
+
+## 2.3 当一个异常出现以后，ARM微处理器会执行哪几步操作？
+
+1. **将下一条指令的地址存入相应连接寄存器LR，以便程序在处理异常返回时能从正确的位置重新开始执行。**若异常是从ARM状态进入，则LR寄存器中保存的是下一条指令的地址（当前PC＋4或PC＋8，与异常的类型有关）；若异常是从Thumb状态进入，则在LR寄存器中保存当前PC的偏移量，这样，异常处理程序就不需要确定异常是从何种状态进入的。例如：在软件中断异常SWI，指令MOV PC，R14_svc总是返回到下一条指令，不管SWI是在ARM状态执行，还是在Thumb状态执行。
+2. 将CPSR复制到相应的SPSR中。
+3. 根据异常类型，强制设置CPSR的运行模式位。
+4. 强制PC从相关的异常向量地址取下一条指令执行，从而跳转到相应的异常处理程序处。
+
+## 2.4 中断处理程序应该如何编写
+
+1. 写一个中断服务程序要注意**快进快出**，在中断服务程序里面**尽量快速采集信息**，包括**硬件信息，然后退出中断**，要做其它事情可以使用工作队列或者tasklet方式，也就是中断上半部和下半部（这种思想也可以应用到裸机编程中）。
+2. **中断服务程序中不能有阻塞操作**。应为中断期间是完全占用CPU的（即不存在内核调度），中断被阻塞住，其他进程将无法操作。
+3. **中断服务程序注意返回值**，要用操作系统定义的宏做为返回值，而不是自己定义的。（中断服务函数是无法返回值的，考虑使用全局变量）
+4. 如果要做的事情较多，应将这些任务放在后半段(tasklet，等待队列等)处理。
+
+# 3 通信协议
+
+## 3.1 同步和异步传输
+
+异步传输（无时钟线，依赖每个字节前的标志/同步位，UART）：是一种典型的基于字节的输入输出，数据按每次一个字节进行传输，其传输速度低。
+
+同步传输（有时钟线，IIC，SPI，带同步时钟线的USART，QSPI）：需要外界的时钟信号进行通信，是把数据字节组合起来一起发送，这种组合称之为帧，其传输速度比异步传输快。
+
+## 3.2 RS232和RS485
+
+RS的意思是Recommend Standard。
+
+这两种都是硬件协议。
+
+| 区别点     | RS232                                          | RS485                                        |
+| ---------- | ---------------------------------------------- | -------------------------------------------- |
+| 距离       | 距离较短，一般在20m以内                        | 距离较远，做好差分匹配可以到数百米甚至上千米 |
+| 数据速率   | 低，20Kbps                                     | 高，100Kbps                                  |
+| 传输方式   | 不平衡的传输方式，单端通讯                     | 平衡传输方式，差分方式传输                   |
+| 传输网络   | 一对一                                         | 多点                                         |
+| 电压标准   | 典型工作电平，+3～+12V为逻辑0，-3～-12V为逻辑1 | AB间电平2\~6V为逻辑1，-2\~-6V为逻辑0         |
+| 抗干扰性能 | 共地传输，容易产生共模干扰，抗干扰能力差       | 差分通信，抗共模干能力强，抗噪声干扰能力强   |
+| 连接方式   | 全双工                                         | 半双工                                       |
+
+![RS-485 与 RS-232的区别（总结），看了就明白](F:\8.ObsidianNote\figures\v2-3191414c7a3e4bd655d7e2f3dfa86bb2_720w-1683534931966-16.jpg)
+
+## 3.3 SPI
+
+> 参考链接：
+>
+> [STMCU中文官网](https://www.stmcu.com.cn/Search/index?csrf_token=3981e95d41743701a4c30827ca792aa6&search_keywords=RM0433&type=design_resource&page=1)
+>
+> [(2条消息) 标准SPI，Dual SPI和Qual SPI_山德鲁老师的博客-CSDN博客_dual spi](https://blog.csdn.net/miaokoko/article/details/79051209)
+>
+> [(2条消息) 理解SPI/Dual SPI/Quad SPI/QPI之间的区别_coder.mark的博客-CSDN博客_spi和qpi](https://blog.csdn.net/tianizimark/article/details/124608851)
 
 SPI接口通常指标准SPI，Dual SPI和Quad SPI通常是相对标准SPI提出的，在标准SPI的基础上，通过半双工的方式，增加了1根、3根数据线，以达到提高数据传输速度的作用。
 
 > 需要注意的是，无论是哪种SPI，都是主从式接口，同一条总线上只能有一个主机，可以有一个或者多个从机；传输都是由主机发起的。
->
 > 一般情况下，当主机的CS/SS引脚输出为高电平时，代表总线空闲。
->
 > SPI Flash一般为NOR Flash。
 
-# 1 标准SPI（serial peripheral interface）串行外设接口
+### 3.3.1 标准SPI（serial peripheral interface）串行外设接口
 
 参考链接：[[SPI\].SPI协议详解 - aaronGao - 博客园 (cnblogs.com)](https://www.cnblogs.com/aaronLinux/p/6219146.html)
 
@@ -24,9 +312,9 @@ SPI接口通常指标准SPI，Dual SPI和Quad SPI通常是相对标准SPI提出�
 
 一般情况下硬件接线拓扑如下：
 
-![image-20220919151738488](figures/image-20220919151738488.png)
+![image-20220919151738488](F:\8.ObsidianNote\figures\image-20220919151738488-1683535148598-1.png)
 
-![image-20220919195636632](figures/image-20220919195636632.png)
+![image-20220919195636632](F:\8.ObsidianNote\figures\image-20220919195636632-1683535148599-2.png)
 
 上图只是对 SPI 设备间通信的一个简单的描述, 下面就来解释一下图中所示的几个组件(Module):
 
@@ -43,31 +331,31 @@ SPI接口通常指标准SPI，Dual SPI和Quad SPI通常是相对标准SPI提出�
 
 SPI 设备在进行通信的过程中, Master 设备和 Slave 设备之间会产生一个数据链路回环(Data Loop), 就像上图所画的那样, 通过 SDO 和 SDI 管脚, SSPSR 控制数据移入移出 SSPBUF, Controller 确定 SPI 总线的通信模式, SCK 传输时钟信号。
 
-## 1.1 主-从模式(Master-Slave) 的控制方式
+#### 3.3.1.1 主-从模式(Master-Slave) 的控制方式
 
 SPI 规定了两个 SPI 设备之间通信必须由主设备 (Master) 来控制次设备 (Slave)。一个 Master 设备可以通过提供 Clock 以及对 Slave 设备进行**片选 (Slave Select) 来控制多个 Slave 设备**, SPI 协议还规定 Slave 设备的 Clock 由 Master 设备通过 SCK 管脚提供给 Slave 设备, Slave 设备本身不能产生或控制 Clock, 没有 Clock 则 Slave 设备不能正常工作。
 
 **SPI只有主模式和从模式之分，并没有读/写的说法**， 因为实质上每次SPI是主从设备在交换数据。也就是说，你发一个数据必然会收到一个数据；你要收一个数据必须也要先发一个数据。
 
-## 1.2 同步方式(Synchronous)传输数据
+#### 3.3.1.2 同步方式(Synchronous)传输数据
 
 Master 设备会根据将要交换的数据来产生相应的时钟脉冲(Clock Pulse), 时钟脉冲组成了时钟信号(Clock Signal) , **时钟信号通过时钟极性 (CPOL) 和 时钟相位 (CPHA) 控制着两个 SPI 设备间何时数据交换以及何时对接收到的数据进行采样, 来保证数据在两个设备之间是同步传输的**。
 
-![image-20220919195319542](figures/image-20220919195319542.png)
+![image-20220919195319542](F:\8.ObsidianNote\figures\image-20220919195319542-1683535148599-3.png)
 
-## 1.3 数据交换(Data Exchanges)
+#### 3.3.1.3 数据交换(Data Exchanges)
 
 SPI 设备间的数据传输之所以又被称为**数据交换**, **是因为 SPI 协议规定一个 SPI 设备不能在数据通信过程中仅仅只充当一个 "发送者(Transmitter)" 或者 "接收者(Receiver)"**. 在每个 Clock 周期内, **SPI 设备都会发送并接收一个 bit 大小的数据(**不管主设备还是从设备**)**, 相当于该设备有一个 bit 大小的数据被交换了。 一个 Slave 设备要想能够接收到 Master 发过来的控制信号, 必须在此之前能够被 Master 设备进行访问 (Access). 所以, Master 设备必须首先通过 SS/CS pin 对 Slave 设备进行片选, 把想要访问的 Slave 设备选上。 在数据传输的过程中, 每次接收到的数据必须在下一次数据传输之前被采样. 如果之前接收到的数据没有被读取, 那么这些已经接收完成的数据将有可能会被丢弃, 导致 SPI 物理模块最终失效。**因此, 在程序中一般都会在 SPI 传输完数据后, 去读取 SPI 设备里的数据, 即使这些数据(Dummy Data)在我们的程序里是无用的(**虽然发送后紧接着的读取是无意义的，但仍然需要从寄存器中读出来**)**。
 
-![image-20220919195452492](figures/image-20220919195452492.png)
+![image-20220919195452492](F:\8.ObsidianNote\figures\image-20220919195452492-1683535148599-4.png)
 
-![image-20220919195458046](figures/image-20220919195458046.png)
+![image-20220919195458046](F:\8.ObsidianNote\figures\image-20220919195458046-1683535148599-5.png)
 
-![img](figures/8b77793457044b09ade6e66ee819d464.gif)
+![img](F:\8.ObsidianNote\figures\8b77793457044b09ade6e66ee819d464-1683535148599-6.gif)
 
-![image-20220919195513673](figures/image-20220919195513673.png)
+![image-20220919195513673](F:\8.ObsidianNote\figures\image-20220919195513673-1683535148599-7.png)
 
-## 1.4 时钟极性CPOL（Clock Polarity）和时钟相位CPHA（Clock Phase）
+#### 3.3.1.4 时钟极性CPOL（Clock Polarity）和时钟相位CPHA（Clock Phase）
 
 SPI的极性Polarity和相位Phase，最常见的写法是CPOL和CPHA，不过也有一些其他写法，简单总结如下：
 
@@ -88,7 +376,7 @@ SPI的极性Polarity和相位Phase，最常见的写法是CPOL和CPHA，不过�
 
 因此，SPI具有4种传输模式：**上升沿、下降沿、前沿、后沿触发**，当然也有MSB和LSB传输方式，只不过这与CPOL和CPHA无关。
 
-![image-20220919195021661](figures/image-20220919195021661.png)
+![image-20220919195021661](F:\8.ObsidianNote\figures\image-20220919195021661-1683535148599-8.png)
 
 模式0：CPOL= 0，CPHA=0。SCK串行时钟线空闲是为低电平，数据在SCK时钟的上升沿被采样，数据在SCK时钟的下降沿切换
 
@@ -107,7 +395,7 @@ SPI的极性Polarity和相位Phase，最常见的写法是CPOL和CPHA，不过�
 
 > **根据不同的设备，需要选择不同的模式。**
 
-## 1.5 如何设置SPI的极性和相位
+#### 3.3.1.5 如何设置SPI的极性和相位
 
 SPI分主设备和从设备，两者通过SPI协议通讯。
 
@@ -133,11 +421,11 @@ SPI从设备，具体是什么模式，相关的datasheet中会有描述，需�
 
 对于如何配置SPI的CPOL和CPHA的话，不多细说，多数都是直接去写对应的SPI控制器中对应寄存器中的CPOL和CPHA那两位，写0或写1即可。
 
-## 1.6 SPI中的一些名词的具体解释
+#### 3.3.1.6 SPI中的一些名词的具体解释
 
 **SSPSR移位寄存器**
 
-![img](figures/0e3177c6f63d4db781136dbfb672d7c2.jpeg)
+![img](F:\8.ObsidianNote\figures\0e3177c6f63d4db781136dbfb672d7c2-1683535148599-9.jpeg)
 
 SSPSR 是 SPI 设备内部的移位寄存器(Shift Register). 它的主要作用是根据 SPI 时钟信号状态, 往 SSPBUF 里移入或者移出数据, 每次移动的数据大小由 Bus-Width 以及 Channel-Width 所决定。
 
@@ -149,7 +437,7 @@ Channel-Width 的作用是指定 Master 设备与 Slave 设备之间数据传输
 
 **SSPBUF**
 
-![img](figures/85accde73dbb440292b52d3a53485e4c.jpeg)
+![img](F:\8.ObsidianNote\figures\85accde73dbb440292b52d3a53485e4c-1683535148600-12.jpeg)
 
 我们知道, 在每个时钟周期内, Master 与 Slave 之间交换的数据其实都是 SPI 内部移位寄存器从 SSPBUF 里面拷贝的. 我们可以通过往 SSPBUF 对应的寄存器 (Tx-Data / Rx-Data register) 里读写数据, 间接地操控 SPI 设备内部的 SSPBUF.
 
@@ -157,25 +445,25 @@ Channel-Width 的作用是指定 Master 设备与 Slave 设备之间数据传输
 
 **Controller**
 
-![img](figures/5a51bfddcd3440be821b8bbbeee9de60.jpeg)
+![img](F:\8.ObsidianNote\figures\5a51bfddcd3440be821b8bbbeee9de60-1683535148600-10.jpeg)
 
 Master 设备里面的 Controller 主要通过时钟信号(Clock Signal)以及片选信号(Slave Select Signal)来控制 Slave 设备. Slave 设备会一直等待, 直到接收到 Master 设备发过来的片选信号, 然后根据时钟信号来工作.
 
 Master 设备的片选操作必须由程序所实现. 例如: 由程序把 SS/CS 管脚的时钟信号拉低电平, 完成 SPI 设备数据通信的前期工作; 当程序想让 SPI 设备结束数据通信时, 再把 SS/CS 管脚上的时钟信号拉高电平.Controller
 
-![img](figures/5a51bfddcd3440be821b8bbbeee9de60-1664245963429-1.jpeg)
+![img](F:\8.ObsidianNote\figures\5a51bfddcd3440be821b8bbbeee9de60-1664245963429-1-1683535148600-11.jpeg)
 
 Master 设备里面的 Controller 主要通过时钟信号(Clock Signal)以及片选信号(Slave Select Signal)来控制 Slave 设备. Slave 设备会一直等待, 直到接收到 Master 设备发过来的片选信号, 然后根据时钟信号来工作.
 
 Master 设备的片选操作必须由程序所实现. 例如: 由程序把 SS/CS 管脚的时钟信号拉低电平, 完成 SPI 设备数据通信的前期工作; 当程序想让 SPI 设备结束数据通信时, 再把 SS/CS 管脚上的时钟信号拉高电平.
 
-# 2 Dual SPI（Dual serial peripheral interface）双线串行外设接口 
+### 3.3.2 Dual SPI（Dual serial peripheral interface）双线串行外设接口 
 
 Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash，全双工并不常用，因此可以扩展了mosi和miso的用法，**让它们工作在半双工**，用以加倍数据传输速度。如下图的QIO0、QIO1总线，标准SPI通信时发送和接收时主机和从机都只能使用自己的那根数据线进行数据传输，Dual SPI无论是接收还是发送都是使用两根数据线进行的，所以**单向数据传输速度上是标准SPI的双倍（即一个时钟周期传输2bit数据）**。
 
 ![image-20220919151750833](figures/image-20220919151750833.png)
 
-# 3 Quad SPI（Quad serial peripheral interface）四线SPI，即数据线最多可以使用4根
+### 3.3.3 Quad SPI（Quad serial peripheral interface）四线SPI，即数据线最多可以使用4根
 
 参考链接：[(2条消息) 手把手系列--STM32 QSPI操作指南_coder.mark的博客-CSDN博客_qspi](https://blog.csdn.net/tianizimark/article/details/121718162)
 
@@ -183,9 +471,9 @@ Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash
 
 一般来说，Quad SPI外设可以使用任意一种SPI模式，具体要看从设备的要求。
 
-![image-20220919151801013](figures/image-20220919151801013.png)
+![image-20220919151801013](F:\8.ObsidianNote\figures\image-20220919151801013-1683535250600-25.png)
 
-## 3.1 主要特性
+#### 3.3.3.1 主要特性
 
 在STM32H7的应用手册中是这样解释的，QUADSPI 是一种专用的通信接口，连接单、双或四（条数据线）SPI FLASH 存储介质。该接口可以在以下三种模式下工作：
 
@@ -207,15 +495,15 @@ Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash
 8. 在达到 FIFO 阈值和传输完成时生成 MDMA 触发信号
 9. 在达到 FIFO 阈值、超时、操作完成以及发生访问错误时产生中断
 
-## 3.2 功能框图
+#### 3.3.3.2 功能框图
 
 **STM32H7中集成的Quad SPI外设的功能框图如下：**
 
-![image-20220919151512710](figures/image-20220919151512710.png)
+![image-20220919151512710](F:\8.ObsidianNote\figures\image-20220919151512710-1683535250600-26.png)
 
-![image-20220919151533265](figures/image-20220919151533265.png)
+![image-20220919151533265](F:\8.ObsidianNote\figures\image-20220919151533265-1683535250601-28.png)
 
-## 3.3 引脚定义
+#### 3.3.3.3 引脚定义
 
 **QUADSPI引脚定义如下：**
 
@@ -233,7 +521,7 @@ Dual SPI一般针对SPI Flash，而不是针对所有SPI外设，对于SPI Flash
 | BK1_nCS    | 数字输出      | 片选（低电平有效），适用于 FLASH 1。如果QUADSPI 始终在双闪存模式下工作，则其也可用于 FLASH 2。 |
 | BK2_nCS    | 数字输出      | 片选（低电平有效），适用于 FLASH 2。如果QUADSPI 始终在双闪存模式下工作，则其也可用于 FLASH 1。 |
 
-## 3.4 命令序列
+#### 3.3.3.4 命令序列
 
 参考链接：[(2条消息) 手把手系列--STM32 QSPI操作指南_coder.mark的博客-CSDN博客_qspi](https://blog.csdn.net/tianizimark/article/details/121718162)
 
@@ -242,17 +530,17 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 <center><b>四线模式下的读命令示例</b></center>
 
-![image-20220920092734827](figures/image-20220920092734827.png)
+![image-20220920092734827](F:\8.ObsidianNote\figures\image-20220920092734827-1683535250601-27.png)
 
 <font size=5>**指令阶段**</font>
 
 指令阶段只可以发送一个字节的数据，通过往寄存器QUADSPI_CCR[7:0]的INSTRUCTION字段写入即可。指令可以通过1/2/4线发送。一般1线的比较常见。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1683535250601-29.png)
 
 如下表所示，QUADSPI_CCR[9:8] 寄存器中的 IMODE[1:0]字段可用于配置指令阶段的位数（线数），**IMODE[1:0]=00代表没有指令阶段**。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663637996965-27.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663637996965-27-1683535250601-30.png)
 
 <font size=5>**地址阶段**</font>
 
@@ -262,7 +550,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 ADMODE = 00，则跳过地址阶段，命令序列直接进入下一阶段（如果存在）。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638127349-30.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638127349-30-1683535250601-31.png)
 
 <font size=5>**交替字节阶段**</font>
 
@@ -274,9 +562,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 交替字节阶段存在**仅需发送单个半字节而不是一个全字节**的情况，比如采用双线模式并且仅使用两个周期发送交替字节时。在这种情况下，固件可采用四线模式 (ABMODE = 11) 并发 送一个字节，方法是 ALTERNATE 的位 7 和 3 置“1”（IO3 保持高电平）且位 6 和 2 置 “0”（IO2 线保持低电平）。此时，半字节的高 2 位存放在 ALTERNATE 的位 4:3，低 2 位存放在位 1 和 0 中。例如，如果半字节 2 (0010) 通过 IO0/IO1 发送，则 ALTERNATE 应 设置为 0x8A (1000_1010)。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638588076-35.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638588076-35-1683535250601-32.png)
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638596222-38.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638596222-38-1683535250601-33.png)
 
 <font size=5>**空指令周期阶段**</font>
 
@@ -292,7 +580,7 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 >
 > 如果使用了QUADSPI硬件配置并且此周期内使用Quad-SPI或者Dual-SPI模式，则IO2被硬件强制设置为0来禁用写保护功能，并且IO被硬件强制设置为1来禁用保持功能。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638841799-41.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663638841799-41-1683535250601-34.png)
 
 <font size=5>**数据阶段**</font>
 
@@ -308,13 +596,13 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 DMODE = 00，则跳过数据阶段，命令序列在拉高 nCS 时立即完成。这一配置仅可用于仅间接写入模式。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663639052404-44.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663639052404-44-1683535250601-35.png)
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1683535250601-29.png)
 
-## 3.5 信号接口协议模式
+#### 3.3.3.5 信号接口协议模式
 
-#### <font size=5>**单线（标准）SPI模式**</font>
+<font size=5>**单线（标准）SPI模式**</font>
 
 传统 SPI 模式允许串行发送/接收单独的 1 位。在此模式下，数据通过 SO 信号（其 I/O 与 IO0 共享）发送到 FLASH。从 FLASH 接收到的数据通过 SI（其 I/O 与 IO1 共享）送达。
 
@@ -329,9 +617,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 若 DMODE = 01，这对于空指令阶段也同样如此。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663725323469-3.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663725323469-3-1683535250601-36.png)
 
-#### <font size=5>**双线SPI模式**</font>
+<font size=5>**双线SPI模式**</font>
 
 在双线模式下，通过 IO0/IO1 信号同时发送/接收两位。
 
@@ -345,9 +633,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 在空指令阶段，若 DMODE = 01，则 IO0/IO1 始终保持高阻态。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726165946-9.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726165946-9-1683535250601-37.png)
 
-#### <font size=5>**QSPI模式**</font>
+<font size=5>**QSPI模式**</font>
 
 在四线模式下，通过 IO0/IO1/IO2/IO3 信号同时发送/接收四位。
 
@@ -359,9 +647,9 @@ nCS 在每条指令开始前下降，在每条指令完成后再次上升。
 
 IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 SPI 模式，即使 QUADSPI 激活，对应 IO2 和 IO3 的引脚也可用于其他功能。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726217527-12.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663726217527-12-1683535250601-38.png)
 
-#### <font size=5>**SDR模式（单倍数据速率模式，single data rate）**</font>
+<font size=5>**SDR模式（单倍数据速率模式，single data rate）**</font>
 
 默认情况下，DDRM 位 (QUADSPI_CCR[31]) 为 0，QUADSPI 在单倍数据速率 (SDR) 模式 下工作。
 
@@ -369,7 +657,7 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 在 SDR 模式下接收数据时，QUADSPI 假定 FLASH 也通过 CLK 的下降沿发送数据。默认 情况下 (SSHIFT = 0 时)，将使用 CLK 后续的边沿（上升沿）对信号进行采样。
 
-#### <font size=5>**DDR模式（双倍数据速率模式，dual data rate）**</font>
+<font size=5>**DDR模式（双倍数据速率模式，dual data rate）**</font>
 
 若 DDRM 位 (QUADSPI_CCR[31]) 置 1，则 QUADSPI 在双倍数据速率 (DDR) 模式下 工作。
 
@@ -381,9 +669,9 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 因此，在半个 CLK 周期后（下一个反向边沿）对信号采样。
 
-![image-20220921101711830](figures/image-20220921101711830.png)
+![image-20220921101711830](F:\8.ObsidianNote\figures\image-20220921101711830-1683535250601-39.png)
 
-#### <font size=5>**双闪存模式**</font>
+<font size=5>**双闪存模式**</font>
 
 若 DFM 位（QUADSPI_CR 的位 6）为 1，QUADSPI 处于双闪存模式。QUADSPI 使用两 个外部四线 SPI FLASH（FLASH 1 和 FLASH 2），在每个周期中发送/接收 8 位（在 DDR 模式下为 16 位），能够有效地将吞吐量和容量扩大一倍。
 
@@ -401,15 +689,15 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 在双闪存模式下，FLASH 1 接口信号的行为基本上与正常模式下相同。在指令、地址、交替 字节以及空指令周期阶段，FLASH 2 接口信号具有与 FLASH 1 接口信号完全相同的波形。 也就是说，每个 FLASH 总是接收相同的指令与地址。然后，在数据阶段，BK1_IOx 和 BK2_IOx 总线并行传输数据，但发送到 FLASH 1（或从其接收）的数据与 FLASH 2 中的 不同。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727710340-15.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727710340-15-1683535250601-40.png)
 
 双闪存模式下，指令、地址、交替字节、空指令周期**同时发送**给BINK1和BINK2。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727957623-18.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663727957623-18-1683535250601-41.png)
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728187152-21.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728187152-21-1683535250601-42.png)
 
-## 3.6 功能说明
+#### 3.3.3.6 功能说明
 
 #### <font size=5>**间接模式**</font>
 
@@ -427,7 +715,7 @@ IO2 和 IO3 仅用于 Quad SPI 模式，如果未配置任何阶段使用四线 
 
 当发送或接收的字节数达到编程设定值时，如果 TCIE = 1，则 TCF 置 1 并产生中断。在数 据数量不确定的情况下，将根据 QUADSPI_CR 中定义的 FLASH 大小，在达到外部 SPI 的 限制时，TCF 置 1。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728366102-24.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728366102-24-1683535250601-43.png)
 
 **触发命令启动**
 
@@ -473,7 +761,7 @@ FTHRES[3:0] 用于定义 FIFO 的阈值 如果达到阈值，FTF（FIFO 阈值�
 
 数据寄存器 (QUADSPI_DR) 包含最新接收的状态字节（FIFO 停用）。数据寄存器的内容不 受匹配逻辑所用屏蔽方法的影响。FTF 状态位在新一次状态读取完成后置 1，并且 FTF 在数 据读取后清零。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728761054-27.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728761054-27-1683535250601-44.png)
 
 #### <font size=5>**内存映射模式**</font>
 
@@ -498,7 +786,7 @@ QUADSPI 外设若没有正确配置并使能，禁止访问 QUADSPI Flash 的存
 
 BUSY 在第一个存储器映射访问发生时变为高电平。由于进行预取操作，BUSY 在发生超时、中止或外设禁止前不会下降。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728836518-30.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663728836518-30-1683535250601-45.png)
 
 内存映射模式下最大访问大小为256Mbytes，访问地址为0x90000000 - 0x9FFFFFFF；
 
@@ -506,7 +794,7 @@ BUSY 在第一个存储器映射访问发生时变为高电平。由于进行预
 
 **<font color="#dd0000">不支持直接从外部Quad-SPI Flash启动</font>，但是可以先从内部Flash启动，然后配置Quad-SPI为内存映射模式，然后就可以从外部Quad-SPI Flash执行代码。**
 
-![img](figures/46639f7dc35b48b2a6f431ee26c8e76a.png)
+![img](F:\8.ObsidianNote\figures\46639f7dc35b48b2a6f431ee26c8e76a-1683535250601-46.png)
 
 上图是内存映射模式下建议的MPU设置为strongly-ordered类型。这个知识点请参考：
 
@@ -535,7 +823,7 @@ QUADSPI 通信配置寄存器 (QUADSPI_CCR) 中的自由运行时钟模式位 (F
 
 如果DMAEN已经为1，如果需要更改FTHRES/FMODE则DMA控制器必须先禁用。
 
-![img](figures/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663730247981-35.png)
+![img](F:\8.ObsidianNote\figures\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAY29kZXIubWFyaw==,size_20,color_FFFFFF,t_70,g_se,x_16-1663730247981-35-1683535250601-47.png)
 
 #### <font size=5>**SPI FLASH 配置**</font>
 
@@ -598,11 +886,11 @@ DDR 模式可通过 DDRM 位进行设置。使能该模式后，在每个时钟�
 
 可以使用单独的中断使能位以提高灵活性。
 
-![image-20220921112135618](figures/image-20220921112135618.png)
+![image-20220921112135618](F:\8.ObsidianNote\figures\image-20220921112135618-1683535250601-48.png)
 
 #### **<font size=5>更具体的内容参考数据手册</font>**
 
-## 3.7 配置例程
+#### 3.3.3.7 配置例程
 
 以下例程来自ART-PI的例程art_pi_bootloader，主要负责初始化QUADSPI，W25Q64JV退出QSPI模式，复位W25Q64JV，W25Q64JV进入QSPI模式。
 
@@ -906,5 +1194,164 @@ typedef struct
 //TimeOutPeriod FIFO满时，释放芯片选择之前要等待的时钟周期数。
 
 //TimeOutActivation指定是否启用超时计数器以释放芯片选择
+```
+
+
+
+## 3.4 IIC
+
+参考Understanding the I2C Bus - Texas Instruments.pdf
+
+## 3.5 UART/USART
+
+![img](F:\8.ObsidianNote\figures\01adi_f03-1683534931966-17.jpg)
+
+[了解UART - Embedded.com](https://www.embedded.com/understanding-the-uart/)
+
+停止位是1、1.5和2。
+
+# 4 编程
+
+## 4.1 大端和小端
+
+大端模式：低位字节存在高地址上，高位字节存在低地址上。
+
+小端模式：高位字节存在高地址上，低位字节存在低地址上。
+
+<img src="F:/8.ObsidianNote/figures/1024px-Big-Endian.svg.png" alt="img" style="zoom: 50%;" /><img src="F:\8.ObsidianNote\figures\1024px-Little-Endian.svg-1683534931966-19.png" alt="img" style="zoom:50%;" />
+
+STM32是小端模式，51一般是大端模式。对于0x1234，小端存放方式如下：
+
+| 内存地址 | 存放内容 |
+| -------- | -------- |
+| 0x4000   | 0x34     |
+| 0x4001   | 0x12     |
+
+大端存放方式如下：
+
+| 内存地址 | 存放内容 |
+| -------- | -------- |
+| 0x4000   | 0x12     |
+| 0x4001   | 0x34     |
+
+## 4.2 判断大端和小端
+
+**联合体法**
+
+```c
+#include <stdio.h>
+int checkCPU()
+{
+	union w
+	{
+		int a;
+		char b;
+	}c;
+	c.a =1;
+	return(c.b == 1);
+}
+int main()
+{
+	if(checkCPU())
+		printf("小端\n");
+	else
+		printf("大端\n");
+	return 0;
+}
+```
+
+**指针法**
+
+```c
+#include <stdio.h>
+
+int checkCPU()
+{
+	unsigned short usData = 0x1122;
+	unsigned char*pucData = (unsigned char*)&usData;
+	return (*pucData == 0x22);
+}
+
+int main()
+{
+	if(checkCPU())
+		printf("小端\n");
+	else
+		printf("大端\n");
+	return 0;
+}
+```
+
+## 4.3 大小端转换
+
+```c
+/**
+ * @brief   大小端互转
+ * @param   data:       数据的指针
+ *          size:       数据长度
+ * @return  void
+ */
+void big_little_endian_conversion(void *data, size_t size)
+{
+    for(size_t i = 1; i < size; i++)
+    {
+        for(size_t j = 1; j < size - i + 1; j++)
+        {
+            uint8_t c = *(((uint8_t *)data) + j - 1);
+            *(((uint8_t *)data) + j - 1) = *(((uint8_t *)data) + j);
+            *(((uint8_t *)data) + j) = c;
+        }
+    }
+}
+```
+
+## 4.4 对绝对地址赋值
+
+嵌入式系统经常具有要求程序员去访问某特定的内存位置的特点。在某工程中，要求设置一绝对地址为0x67a9的整型变量的值为0xaa66。编译器是一个纯粹的ANSI编译器。写代码去完成这一任务。
+这一问题测试你是否知道为了访问一绝对地址把一个整型数强制转换（typecast）为一指针是合法的。这一问题的实现方式随着个人风格不同而不同。典型的类似代码如下：
+
+```c
+int *ptr;
+ptr = (int *)0x67a9;
+*ptr = 0xaa55; 
+```
+
+A more obscure approach is:
+ 一个较晦涩的方法是： 
+
+```c
+*(int * const)(0x67a9) = 0xaa55; 
+```
+
+即使你的品味更接近第二种方案，但我建议你在面试时使用第一种方案。
+
+## 4.5 函数指针跳转
+
+对嵌软来说很有用。
+
+```c
+// 可以先定义一个函数指针
+typedef void(*)() voidFuncPtr;		// 首先是一个指针，指向一个函数，返回类型是void，形参是void
+*((voidFuncPtr)0x100000)();
+
+// 或者
+(*((void(*)())0x10000))();
+```
+
+
+
+```c
+void Reset_test(void)
+{
+	typedef  void (*iapfun)(void);
+	uint32_t JUMP_ADDR = 0x08004000;	// 程序跳转地址
+	uint32_t STACK_ADDR = 0x20000000;
+	uint32_t RESET_IRQ_ADDR = JUMP_ADDR + 4;
+	iapfun jump2app;
+	jump2app = (iapfun)*(volatile uint32_t *)RESET_IRQ_ADDR;
+	__set_MSP(STACK_ADDR);
+	__disable_irq();
+	jump2app();
+}
 ```
 
