@@ -1,5 +1,6 @@
 # Interview-Note
-参考文件见Reference文件夹
+1. 参考文件见Reference文件夹
+2. 文本量较大，可以使用Github直接查看，使用Obsidian等非纯实时渲染软件进行编辑，以避免卡顿。
 
 # 免责声明
 
