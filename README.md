@@ -5,3 +5,21 @@
 # 免责声明
 
 很多内容都是摘抄的，比如LeetCode的题解有很多是直接搬运的，主要是为了美观考虑，删除了题解的来源，如有异议，可联系删除。
+
+# Reference
+
+此处为参考的文献或文档，但很多内容散落在文章中间了，并不能很好地做到整理，欢迎pr。
+
+- LeetCode 各算法题解
+
+- [Introduction - Algorithm-Pattern (gitbook.io)](https://mqjyl2012.gitbook.io/algorithm/)
+
+- 数据结构（C++语言版）	邓俊辉第三版
+
+- [OI Wiki - OI Wiki (oi-wiki.org)](https://oi-wiki.org/)
+
+- [@一只特立独行的猫](https://zijiaw.github.io/)
+
+- [KMP与有限状态自动机 | Huangstomach's Blog](https://huangstomach.github.io/2019/02/12/KMP与有限状态自动机/)
+
+  
