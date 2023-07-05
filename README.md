@@ -1,6 +1,7 @@
 # Interview-Note
 1. 参考文件见Reference文件夹
 2. 文本量较大，可以使用Github直接查看，使用Obsidian等非纯实时渲染软件进行编辑，以避免卡顿。
+3. 由于部分公式写的时候偷懒了，所以Github查看还是存在问题的，建议就用Obsidian或者Typora吧。
 
 # 免责声明
 
