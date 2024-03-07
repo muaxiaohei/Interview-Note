@@ -4,16 +4,16 @@
 
 所有嵌入式软件架构的起点，并且是理解 RTOS 的重要基石。
 
-![image-20231230170803734](F:\8.ObsidianNote\5.System Structure\figures\image-20231230170803734.png)
+![image-20231230170803734](figures/image-20231230170803734.png)
 
 阻塞（顺序）代码：
 
-![image-20231230171446018](F:\8.ObsidianNote\5.System Structure\figures\image-20231230171446018.png)
+![image-20231230171446018](figures/image-20231230171446018.png)
 
 非阻塞代码（事件驱动，状态机）：
 
-![image-20231230171556528](F:\8.ObsidianNote\5.System Structure\figures\image-20231230171556528.png)
+![image-20231230171556528](figures/image-20231230171556528.png)
 
 
 
-![image-20231230172136331](F:\8.ObsidianNote\5.System Structure\figures\image-20231230172136331.png) 
+![image-20231230172136331](figures/image-20231230172136331.png) 
