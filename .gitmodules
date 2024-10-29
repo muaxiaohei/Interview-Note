@@ -1,0 +1,3 @@
+[submodule "4.Protocol/1.USB/USB-langids"]
+	path = 4.Protocol/1.USB/USB-langids
+	url = https://github.com/brookebasile/USB-langids.git
